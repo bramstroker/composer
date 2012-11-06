@@ -31,11 +31,13 @@ class InstallCommand extends Command
             ->setDescription('Installs the project dependencies from the composer.lock file if present, or falls back on the composer.json.')
             ->setDefinition(array(
                 new InputOption('prefer-source', null, InputOption::VALUE_NONE, 'Forces installation from package sources when possible, including VCS information.'),
+                new InputOption('prefer-dist', null, InputOption::VALUE_NONE, 'Forces installation from package dist even for dev versions.'),
                 new InputOption('dry-run', null, InputOption::VALUE_NONE, 'Outputs the operations but will not execute anything (implicitly enables --verbose).'),
                 new InputOption('dev', null, InputOption::VALUE_NONE, 'Enables installation of dev-require packages.'),
                 new InputOption('no-custom-installers', null, InputOption::VALUE_NONE, 'Disables all custom installers.'),
                 new InputOption('no-scripts', null, InputOption::VALUE_NONE, 'Skips the execution of all scripts defined in composer.json file.'),
                 new InputOption('verbose', 'v', InputOption::VALUE_NONE, 'Shows more details including new commits pulled in when updating packages.'),
+                new InputOption('optimize-autoloader', 'o', InputOption::VALUE_NONE, 'Optimize autoloader during autoloader dump')
             ))
             ->setHelp(<<<EOT
 The <info>install</info> command reads the composer.lock file from
@@ -60,8 +62,10 @@ EOT
             ->setDryRun($input->getOption('dry-run'))
             ->setVerbose($input->getOption('verbose'))
             ->setPreferSource($input->getOption('prefer-source'))
+            ->setPreferDist($input->getOption('prefer-dist'))
             ->setDevMode($input->getOption('dev'))
             ->setRunScripts(!$input->getOption('no-scripts'))
+            ->setOptimizeAutoloader($input->getOption('optimize-autoloader'))
         ;
 
         if ($input->getOption('no-custom-installers')) {

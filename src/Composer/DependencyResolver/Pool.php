@@ -20,6 +20,7 @@ use Composer\Package\LinkConstraint\LinkConstraintInterface;
 use Composer\Package\LinkConstraint\VersionConstraint;
 use Composer\Repository\RepositoryInterface;
 use Composer\Repository\CompositeRepository;
+use Composer\Repository\ComposerRepository;
 use Composer\Repository\InstalledRepositoryInterface;
 use Composer\Repository\StreamableRepositoryInterface;
 use Composer\Repository\PlatformRepository;
@@ -39,11 +40,14 @@ class Pool
     const MATCH_REPLACE = 3;
 
     protected $repositories = array();
+    protected $providerRepos = array();
     protected $packages = array();
     protected $packageByName = array();
     protected $acceptableStabilities;
     protected $stabilityFlags;
     protected $versionParser;
+    protected $providerCache = array();
+    protected $id = 1;
 
     public function __construct($minimumStability = 'stable', array $stabilityFlags = array())
     {
@@ -72,18 +76,22 @@ class Pool
             $repos = array($repo);
         }
 
-        $id = count($this->packages) + 1;
         foreach ($repos as $repo) {
             $this->repositories[] = $repo;
 
             $exempt = $repo instanceof PlatformRepository || $repo instanceof InstalledRepositoryInterface;
-            if ($repo instanceof StreamableRepositoryInterface) {
+
+            if ($repo instanceof ComposerRepository && $repo->hasProviders()) {
+                $this->providerRepos[] = $repo;
+                $repo->setRootAliases($rootAliases);
+                $repo->resetPackageIds();
+            } elseif ($repo instanceof StreamableRepositoryInterface) {
                 foreach ($repo->getMinimalPackages() as $package) {
                     $name = $package['name'];
                     $version = $package['version'];
                     $stability = VersionParser::parseStability($version);
                     if ($exempt || $this->isPackageAcceptable($name, $stability)) {
-                        $package['id'] = $id++;
+                        $package['id'] = $this->id++;
                         $this->packages[] = $package;
 
                         // collect names
@@ -101,23 +109,30 @@ class Pool
                             }
                         }
 
-                        foreach (array_keys($names) as $name) {
-                            $this->packageByName[$name][] =& $this->packages[$id-2];
+                        foreach (array_keys($names) as $provided) {
+                            $this->packageByName[$provided][] =& $this->packages[$this->id - 2];
                         }
 
                         // handle root package aliases
+                        unset($rootAliasData);
                         if (isset($rootAliases[$name][$version])) {
+                            $rootAliasData = $rootAliases[$name][$version];
+                        } elseif (isset($package['alias_normalized']) && isset($rootAliases[$name][$package['alias_normalized']])) {
+                            $rootAliasData = $rootAliases[$name][$package['alias_normalized']];
+                        }
+
+                        if (isset($rootAliasData)) {
                             $alias = $package;
                             unset($alias['raw']);
-                            $alias['version'] = $rootAliases[$name][$version]['alias_normalized'];
-                            $alias['alias'] = $rootAliases[$name][$version]['alias'];
+                            $alias['version'] = $rootAliasData['alias_normalized'];
+                            $alias['alias'] = $rootAliasData['alias'];
                             $alias['alias_of'] = $package['id'];
-                            $alias['id'] = $id++;
+                            $alias['id'] = $this->id++;
                             $alias['root_alias'] = true;
                             $this->packages[] = $alias;
 
-                            foreach (array_keys($names) as $name) {
-                                $this->packageByName[$name][] =& $this->packages[$id-2];
+                            foreach (array_keys($names) as $provided) {
+                                $this->packageByName[$provided][] =& $this->packages[$this->id - 2];
                             }
                         }
 
@@ -128,11 +143,11 @@ class Pool
                             $alias['version'] = $package['alias_normalized'];
                             $alias['alias'] = $package['alias'];
                             $alias['alias_of'] = $package['id'];
-                            $alias['id'] = $id++;
+                            $alias['id'] = $this->id++;
                             $this->packages[] = $alias;
 
-                            foreach (array_keys($names) as $name) {
-                                $this->packageByName[$name][] =& $this->packages[$id-2];
+                            foreach (array_keys($names) as $provided) {
+                                $this->packageByName[$provided][] =& $this->packages[$this->id - 2];
                             }
                         }
                     }
@@ -142,11 +157,11 @@ class Pool
                     $name = $package->getName();
                     $stability = $package->getStability();
                     if ($exempt || $this->isPackageAcceptable($name, $stability)) {
-                        $package->setId($id++);
+                        $package->setId($this->id++);
                         $this->packages[] = $package;
 
-                        foreach ($package->getNames() as $name) {
-                            $this->packageByName[$name][] = $package;
+                        foreach ($package->getNames() as $provided) {
+                            $this->packageByName[$provided][] = $package;
                         }
 
                         // handle root package aliases
@@ -156,7 +171,7 @@ class Pool
                             $package->setPrettyAlias($alias['alias']);
                             $package->getRepository()->addPackage($aliasPackage = new AliasPackage($package, $alias['alias_normalized'], $alias['alias']));
                             $aliasPackage->setRootPackageAlias(true);
-                            $aliasPackage->setId($id++);
+                            $aliasPackage->setId($this->id++);
 
                             $this->packages[] = $aliasPackage;
 
@@ -195,16 +210,6 @@ class Pool
     }
 
     /**
-    * Retrieves the highest id assigned to a package in this pool
-    *
-    * @return int Highest package id
-    */
-    public function getMaxId()
-    {
-        return count($this->packages);
-    }
-
-    /**
      * Searches all packages providing the given package name and match the constraint
      *
      * @param string                  $name       The package name to be searched for
@@ -214,11 +219,33 @@ class Pool
      */
     public function whatProvides($name, LinkConstraintInterface $constraint = null)
     {
-        if (!isset($this->packageByName[$name])) {
-            return array();
+        if (isset($this->providerCache[$name][(string) $constraint])) {
+            return $this->providerCache[$name][(string) $constraint];
         }
 
-        $candidates = $this->packageByName[$name];
+        return $this->providerCache[$name][(string) $constraint] = $this->computeWhatProvides($name, $constraint);
+    }
+
+    /**
+     * @see whatProvides
+     */
+    private function computeWhatProvides($name, $constraint)
+    {
+        $candidates = array();
+
+        foreach ($this->providerRepos as $repo) {
+            foreach ($repo->whatProvides($this, $name) as $candidate) {
+                $candidates[] = $candidate;
+                if ($candidate->getId() < 1) {
+                    $candidate->setId($this->id++);
+                    $this->packages[$this->id - 2] = $candidate;
+                }
+            }
+        }
+
+        if (isset($this->packageByName[$name])) {
+            $candidates = array_merge($candidates, $this->packageByName[$name]);
+        }
 
         if (null === $constraint) {
             foreach ($candidates as $key => $candidate) {
@@ -291,7 +318,7 @@ class Pool
         return $prefix.' '.$package->getPrettyString();
     }
 
-    private function isPackageAcceptable($name, $stability)
+    public function isPackageAcceptable($name, $stability)
     {
         // allow if package matches the global stability requirement and has no exception
         if (!isset($this->stabilityFlags[$name]) && isset($this->acceptableStabilities[$stability])) {
@@ -361,16 +388,29 @@ class Pool
             $replaces = $candidate->getReplaces();
         }
 
-        foreach ($provides as $link) {
-            if ($link->getTarget() === $name && $constraint->matches($link->getConstraint())) {
-                return self::MATCH_PROVIDE;
+        // aliases create multiple replaces/provides for one target so they can not use the shortcut
+        if (isset($replaces[0]) || isset($provides[0])) {
+            foreach ($provides as $link) {
+                if ($link->getTarget() === $name && $constraint->matches($link->getConstraint())) {
+                    return self::MATCH_PROVIDE;
+                }
             }
+
+            foreach ($replaces as $link) {
+                if ($link->getTarget() === $name && $constraint->matches($link->getConstraint())) {
+                    return self::MATCH_REPLACE;
+                }
+            }
+
+            return self::MATCH_NONE;
         }
 
-        foreach ($replaces as $link) {
-            if ($link->getTarget() === $name && $constraint->matches($link->getConstraint())) {
-                return self::MATCH_REPLACE;
-            }
+        if (isset($provides[$name]) && $constraint->matches($provides[$name]->getConstraint())) {
+            return self::MATCH_PROVIDE;
+        }
+
+        if (isset($replaces[$name]) && $constraint->matches($replaces[$name]->getConstraint())) {
+            return self::MATCH_REPLACE;
         }
 
         return self::MATCH_NONE;

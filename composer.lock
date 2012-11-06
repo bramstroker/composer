@@ -1,5 +1,5 @@
 {
-    "hash": "9d3db3567a8ab846e59af5140e5151d1",
+    "hash": "62a43b569534e1cd55ce455d9f7f1c03",
     "packages": [
         {
             "name": "justinrainbow/json-schema",
@@ -18,43 +18,14 @@
             "require": {
                 "php": ">=5.3.0"
             },
-            "time": "2012-01-03 00:33:17",
+            "time": "2012-01-02 21:33:17",
             "type": "library",
             "installation-source": "dist",
             "autoload": {
                 "psr-0": {
                     "JsonSchema": "src/"
                 }
-            },
-            "license": [
-                "NewBSD"
-            ],
-            "authors": [
-                {
-                    "name": "Igor Wiedler",
-                    "email": "igor@wiedler.ch",
-                    "homepage": "http://wiedler.ch/igor/"
-                },
-                {
-                    "name": "Bruno Prieto Reis",
-                    "email": "bruno.p.reis@gmail.com"
-                },
-                {
-                    "name": "Justin Rainbow",
-                    "email": "justin.rainbow@gmail.com"
-                },
-                {
-                    "name": "Robert Schönthal",
-                    "email": "seroscho@googlemail.com",
-                    "homepage": "http://digitalkaoz.net"
-                }
-            ],
-            "description": "A library to validate a json schema.",
-            "homepage": "https://github.com/justinrainbow/json-schema",
-            "keywords": [
-                "json",
-                "schema"
-            ]
+            }
         },
         {
             "name": "seld/jsonlint",
@@ -73,7 +44,7 @@
             "require": {
                 "php": ">=5.3.0"
             },
-            "time": "2012-03-12 07:52:32",
+            "time": "2012-03-12 04:52:32",
             "bin": [
                 "bin/jsonlint"
             ],
@@ -83,55 +54,37 @@
                 "psr-0": {
                     "Seld\\JsonLint": "src/"
                 }
-            },
-            "license": [
-                "MIT"
-            ],
-            "authors": [
-                {
-                    "name": "Jordi Boggiano",
-                    "email": "j.boggiano@seld.be",
-                    "homepage": "http://seld.be",
-                    "role": "Developer"
-                }
-            ],
-            "description": "JSON Linter",
-            "keywords": [
-                "json",
-                "parser",
-                "linter",
-                "validator"
-            ]
+            }
         },
         {
             "name": "symfony/console",
-            "version": "v2.1.2",
+            "version": "dev-master",
             "target-dir": "Symfony/Component/Console",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/Console",
-                "reference": "v2.1.0-RC2"
+                "reference": "3cbedb831164d5ce9e58995333e70a913864374e"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://github.com/symfony/Console/zipball/v2.1.0-RC2",
-                "reference": "v2.1.0-RC2",
+                "url": "https://github.com/symfony/Console/zipball/3cbedb831164d5ce9e58995333e70a913864374e",
+                "reference": "3cbedb831164d5ce9e58995333e70a913864374e",
                 "shasum": ""
             },
             "require": {
                 "php": ">=5.3.3"
             },
-            "time": "2012-08-22 13:48:41",
+            "time": "1351093287",
             "type": "library",
             "extra": {
                 "branch-alias": {
-                    "dev-master": "2.1-dev"
+                    "dev-master": "2.2-dev"
                 }
             },
-            "installation-source": "dist",
+            "installation-source": "source",
             "autoload": {
                 "psr-0": {
-                    "Symfony\\Component\\Console": ""
+                    "Symfony\\Component\\Console\\": ""
                 }
             },
             "license": [
@@ -157,25 +110,25 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/Finder",
-                "reference": "v2.1.0-RC2"
+                "reference": "v2.1.2"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://github.com/symfony/Finder/zipball/v2.1.0-RC2",
-                "reference": "v2.1.0-RC2",
+                "url": "https://github.com/symfony/Finder/zipball/v2.1.2",
+                "reference": "v2.1.2",
                 "shasum": ""
             },
             "require": {
                 "php": ">=5.3.3"
             },
-            "time": "2012-08-22 13:48:41",
+            "time": "2012-08-22 06:48:41",
             "type": "library",
             "extra": {
                 "branch-alias": {
                     "dev-master": "2.1-dev"
                 }
             },
-            "installation-source": "dist",
+            "installation-source": "source",
             "autoload": {
                 "psr-0": {
                     "Symfony\\Component\\Finder": ""
@@ -199,33 +152,33 @@
         },
         {
             "name": "symfony/process",
-            "version": "v2.1.2",
+            "version": "dev-master",
             "target-dir": "Symfony/Component/Process",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/Process",
-                "reference": "v2.1.2"
+                "reference": "f029d06585ad7646cc2e9ee9daf1f395014e1c7f"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://github.com/symfony/Process/zipball/v2.1.2",
-                "reference": "v2.1.2",
+                "url": "https://github.com/symfony/Process/zipball/f029d06585ad7646cc2e9ee9daf1f395014e1c7f",
+                "reference": "f029d06585ad7646cc2e9ee9daf1f395014e1c7f",
                 "shasum": ""
             },
             "require": {
                 "php": ">=5.3.3"
             },
-            "time": "2012-09-18 22:37:29",
+            "time": "1349553479",
             "type": "library",
             "extra": {
                 "branch-alias": {
-                    "dev-master": "2.1-dev"
+                    "dev-master": "2.2-dev"
                 }
             },
-            "installation-source": "dist",
+            "installation-source": "source",
             "autoload": {
                 "psr-0": {
-                    "Symfony\\Component\\Process": ""
+                    "Symfony\\Component\\Process\\": ""
                 }
             },
             "license": [
@@ -250,7 +203,8 @@
 
     ],
     "minimum-stability": "stable",
-    "stability-flags": [
-
-    ]
+    "stability-flags": {
+        "symfony/console": 20,
+        "symfony/process": 20
+    }
 }

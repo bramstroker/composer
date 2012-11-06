@@ -91,6 +91,8 @@ class Installer
     protected $autoloadGenerator;
 
     protected $preferSource = false;
+    protected $preferDist = false;
+    protected $optimizeAutoloader = false;
     protected $devMode = false;
     protected $dryRun = false;
     protected $verbose = false;
@@ -111,15 +113,15 @@ class Installer
     /**
      * Constructor
      *
-     * @param IOInterface         $io
-     * @param Config              $config
-     * @param RootPackageInterface    $package
-     * @param DownloadManager     $downloadManager
-     * @param RepositoryManager   $repositoryManager
-     * @param Locker              $locker
-     * @param InstallationManager $installationManager
-     * @param EventDispatcher     $eventDispatcher
-     * @param AutoloadGenerator   $autoloadGenerator
+     * @param IOInterface          $io
+     * @param Config               $config
+     * @param RootPackageInterface $package
+     * @param DownloadManager      $downloadManager
+     * @param RepositoryManager    $repositoryManager
+     * @param Locker               $locker
+     * @param InstallationManager  $installationManager
+     * @param EventDispatcher      $eventDispatcher
+     * @param AutoloadGenerator    $autoloadGenerator
      */
     public function __construct(IOInterface $io, Config $config, RootPackageInterface $package, DownloadManager $downloadManager, RepositoryManager $repositoryManager, Locker $locker, InstallationManager $installationManager, EventDispatcher $eventDispatcher, AutoloadGenerator $autoloadGenerator)
     {
@@ -143,10 +145,14 @@ class Installer
             $this->verbose = true;
             $this->runScripts = false;
             $this->installationManager->addInstaller(new NoopInstaller);
+            $this->mockLocalRepositories($this->repositoryManager);
         }
 
         if ($this->preferSource) {
             $this->downloadManager->setPreferSource(true);
+        }
+        if ($this->preferDist) {
+            $this->downloadManager->setPreferDist(true);
         }
 
         // create installed repo, this contains all local packages + platform packages (php & extensions)
@@ -216,7 +222,7 @@ class Installer
             // write autoloader
             $this->io->write('<info>Generating autoload files</info>');
             $localRepos = new CompositeRepository($this->repositoryManager->getLocalRepositories());
-            $this->autoloadGenerator->dump($this->config, $localRepos, $this->package, $this->installationManager, 'composer');
+            $this->autoloadGenerator->dump($this->config, $localRepos, $this->package, $this->installationManager, 'composer', $this->optimizeAutoloader);
 
             if ($this->runScripts) {
                 // dispatch post event
@@ -269,6 +275,7 @@ class Installer
         $request = new Request($pool);
 
         $constraint = new VersionConstraint('=', $this->package->getVersion());
+        $constraint->setPrettyString($this->package->getPrettyVersion());
         $request->install($this->package->getName(), $constraint);
 
         if ($this->update) {
@@ -294,6 +301,7 @@ class Installer
                     $version = $aliases[$package->getName()][$version]['alias_normalized'];
                 }
                 $constraint = new VersionConstraint('=', $version);
+                $constraint->setPrettyString($package->getPrettyVersion());
                 $request->install($package->getName(), $constraint);
             }
         } else {
@@ -315,6 +323,7 @@ class Installer
             }
 
             $constraint = new VersionConstraint('=', $package->getVersion());
+            $constraint->setPrettyString($package->getPrettyVersion());
             $request->install($package->getName(), $constraint);
         }
 
@@ -365,6 +374,19 @@ class Installer
             return false;
         }
 
+        if ($devMode) {
+            // remove bogus operations that the solver creates for stuff that was force-updated in the non-dev pass
+            // TODO this should not be necessary ideally, but it seems to work around the problem quite well
+            foreach ($operations as $index => $op) {
+                if ('update' === $op->getJobType() && $op->getInitialPackage()->getUniqueName() === $op->getTargetPackage()->getUniqueName()
+                    && $op->getInitialPackage()->getSourceReference() === $op->getTargetPackage()->getSourceReference()
+                    && $op->getInitialPackage()->getDistReference() === $op->getTargetPackage()->getDistReference()
+                ) {
+                    unset($operations[$index]);
+                }
+            }
+        }
+
         // force dev packages to be updated if we update or install from a (potentially new) lock
         foreach ($localRepo->getPackages() as $package) {
             // skip non-dev packages
@@ -387,16 +409,15 @@ class Installer
 
             // force update to locked version if it does not match the installed version
             if ($installFromLock) {
-                unset($lockedReference);
                 foreach ($lockedRepository->findPackages($package->getName()) as $lockedPackage) {
                     if (
                         $lockedPackage->isDev()
-                        && $lockedPackage->getSourceReference()
-                        && $lockedPackage->getSourceReference() !== $package->getSourceReference()
+                        && (
+                            ($lockedPackage->getSourceReference() && $lockedPackage->getSourceReference() !== $package->getSourceReference())
+                            || ($lockedPackage->getDistReference() && $lockedPackage->getDistReference() !== $package->getDistReference())
+                        )
                     ) {
-                        $newPackage = clone $package;
-                        $newPackage->setSourceReference($lockedPackage->getSourceReference());
-                        $operations[] = new UpdateOperation($package, $newPackage);
+                        $operations[] = new UpdateOperation($package, $lockedPackage);
 
                         break;
                     }
@@ -409,25 +430,31 @@ class Installer
                         continue;
                     }
 
-                    $newPackage = null;
+                    // find similar packages (name/version) in all repositories
                     $matches = $pool->whatProvides($package->getName(), new VersionConstraint('=', $package->getVersion()));
-                    foreach ($matches as $match) {
+                    foreach ($matches as $index => $match) {
                         // skip local packages
                         if (!in_array($match->getRepository(), $repositories, true)) {
+                            unset($matches[$index]);
                             continue;
                         }
 
                         // skip providers/replacers
                         if ($match->getName() !== $package->getName()) {
+                            unset($matches[$index]);
                             continue;
                         }
 
-                        $newPackage = $match;
-                        break;
+                        $matches[$index] = $match->getId();
                     }
 
-                    if ($newPackage && $newPackage->getSourceReference() !== $package->getSourceReference()) {
-                        $operations[] = new UpdateOperation($package, $newPackage);
+                    // select prefered package according to policy rules
+                    if ($matches && $matches = $policy->selectPreferedPackages($pool, array(), $matches)) {
+                        $newPackage = $pool->literalToPackage($matches[0]);
+
+                        if ($newPackage && $newPackage->getSourceReference() !== $package->getSourceReference()) {
+                            $operations[] = new UpdateOperation($package, $newPackage);
+                        }
                     }
                 }
 
@@ -475,6 +502,7 @@ class Installer
                     $references = $this->package->getReferences();
                     if (isset($references[$package->getName()])) {
                         $package->setSourceReference($references[$package->getName()]);
+                        $package->setDistReference($references[$package->getName()]);
                     }
                 }
             }
@@ -612,6 +640,40 @@ class Installer
     }
 
     /**
+     * Replace local repositories with InstalledArrayRepository instances
+     *
+     * This is to prevent any accidental modification of the existing repos on disk
+     *
+     * @param RepositoryManager $rm
+     */
+    private function mockLocalRepositories(RepositoryManager $rm)
+    {
+        $packages = array_map(function ($p) {
+            return clone $p;
+        }, $rm->getLocalRepository()->getPackages());
+        foreach ($packages as $key => $package) {
+            if ($package instanceof AliasPackage) {
+                unset($packages[$key]);
+            }
+        }
+        $rm->setLocalRepository(
+            new InstalledArrayRepository($packages)
+        );
+
+        $packages = array_map(function ($p) {
+            return clone $p;
+        }, $rm->getLocalDevRepository()->getPackages());
+        foreach ($packages as $key => $package) {
+            if ($package instanceof AliasPackage) {
+                unset($packages[$key]);
+            }
+        }
+        $rm->setLocalDevRepository(
+            new InstalledArrayRepository($packages)
+        );
+    }
+
+    /**
      * Create Installer
      *
      * @param  IOInterface       $io
@@ -646,7 +708,7 @@ class Installer
     }
 
     /**
-     * wether to run in drymode or not
+     * Whether to run in drymode or not
      *
      * @param  boolean   $dryRun
      * @return Installer
@@ -667,6 +729,32 @@ class Installer
     public function setPreferSource($preferSource = true)
     {
         $this->preferSource = (boolean) $preferSource;
+
+        return $this;
+    }
+
+    /**
+     * prefer dist installation
+     *
+     * @param  boolean   $preferDist
+     * @return Installer
+     */
+    public function setPreferDist($preferDist = true)
+    {
+        $this->preferDist = (boolean) $preferDist;
+
+        return $this;
+    }
+
+    /**
+     * Whether or not generated autoloader are optimized
+     *
+     * @param bool $optimizeAutoloader
+     * @return Installer
+     */
+    public function setOptimizeAutoloader($optimizeAutoloader = false)
+    {
+        $this->optimizeAutoloader = (boolean) $optimizeAutoloader;
 
         return $this;
     }
@@ -756,9 +844,13 @@ class Installer
      * Call this if you want to ensure that third-party code never gets
      * executed. The default is to automatically install, and execute
      * custom third-party installers.
+     *
+     * @return Installer
      */
     public function disableCustomInstallers()
     {
         $this->installationManager->disableCustomInstallers();
+
+        return $this;
     }
 }

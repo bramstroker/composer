@@ -108,7 +108,7 @@ class Locker
     /**
      * Searches and returns an array of locked packages, retrieved from registered repositories.
      *
-     * @param  bool  $dev true to retrieve the locked dev packages
+     * @param  bool                                     $dev true to retrieve the locked dev packages
      * @return \Composer\Repository\RepositoryInterface
      */
     public function getLockedRepository($dev = false)
@@ -165,6 +165,9 @@ class Locker
             }
             if (!empty($info['source-reference'])) {
                 $package->setSourceReference($info['source-reference']);
+                if (is_callable($package, 'setDistReference')) {
+                    $package->setDistReference($info['source-reference']);
+                }
             }
 
             $packages->addPackage($package);
@@ -210,9 +213,11 @@ class Locker
     /**
      * Locks provided data into lockfile.
      *
-     * @param array $packages array of packages
-     * @param mixed $packages array of dev packages or null if installed without --dev
-     * @param array $aliases  array of aliases
+     * @param array  $packages         array of packages
+     * @param mixed  $devPackages      array of dev packages or null if installed without --dev
+     * @param array  $aliases          array of aliases
+     * @param string $minimumStability
+     * @param array  $stabilityFlags
      *
      * @return bool
      */
@@ -284,8 +289,9 @@ class Locker
 
             if ($package->isDev()) {
                 if ('git' === $package->getSourceType() && $path = $this->installationManager->getInstallPath($package)) {
+                    $sourceRef = $package->getSourceReference() ?: $package->getDistReference();
                     $process = new ProcessExecutor();
-                    if (0 === $process->execute('git log -n1 --pretty=%ct '.escapeshellarg($package->getSourceReference()), $output, $path)) {
+                    if (0 === $process->execute('git log -n1 --pretty=%ct '.escapeshellarg($sourceRef), $output, $path)) {
                         $spec['time'] = trim($output);
                     }
                 }

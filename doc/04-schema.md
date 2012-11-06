@@ -354,10 +354,12 @@ Example:
 
 Autoload mapping for a PHP autoloader.
 
-Currently [PSR-0](https://github.com/php-fig/fig-standards/blob/master/accepted/PSR-0.md)
-autoloading, classmap generation and files are supported. PSR-0 is the recommended way though
+Currently [`PSR-0`](https://github.com/php-fig/fig-standards/blob/master/accepted/PSR-0.md)
+autoloading, `classmap` generation and `files` are supported. PSR-0 is the recommended way though
 since it offers greater flexibility (no need to regenerate the autoloader when you add
 classes).
+
+#### PSR-0
 
 Under the `psr-0` key you define a mapping from namespaces to paths, relative to the
 package root. Note that this also supports the PEAR-style non-namespaced convention.
@@ -406,6 +408,8 @@ use an empty prefix like:
         }
     }
 
+#### Classmap
+
 The `classmap` references are all combined, during install/update, into a single
 key => value array which may be found in the generated file
 `vendor/composer/autoload_classmap.php`.
@@ -421,6 +425,8 @@ Example:
             "classmap": ["src/", "lib/", "Something.php"]
         }
     }
+
+#### Files
 
 If you want to require certain files explicitly on every request then you can use
 the 'files' autoloading mechanism. This is useful if your package includes PHP functions
@@ -504,8 +510,10 @@ ignored.
 The following repository types are supported:
 
 * **composer:** A composer repository is simply a `packages.json` file served
-  via HTTP, that contains a list of `composer.json` objects with additional
-  `dist` and/or `source` information.
+  via the network (HTTP, FTP, SSH), that contains a list of `composer.json`
+  objects with additional `dist` and/or `source` information. The `packages.json`
+  file is loaded using a PHP stream. You can set extra options on that stream
+  using the `options` parameter.
 * **vcs:** The version control system repository can fetch packages from git,
   svn and hg repositories.
 * **pear:** With this you can import any pear repository into your composer
@@ -523,6 +531,15 @@ Example:
             {
                 "type": "composer",
                 "url": "http://packages.example.com"
+            },
+            {
+                "type": "composer",
+                "url": "https://packages.example.com",
+                "options": {
+                    "ssl": {
+                        "verify_peer": "true"
+                    }
+                }
             },
             {
                 "type": "vcs",
